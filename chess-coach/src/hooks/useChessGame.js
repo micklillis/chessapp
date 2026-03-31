@@ -54,6 +54,15 @@ export function useChessGame() {
     return 'playing';
   }, []);
 
+  // Called after a move has already been executed on chess.current.
+  // Updates history/status state only — FEN is set by the caller.
+  const afterMove = useCallback((result) => {
+    setLastMove({ from: result.from, to: result.to, san: result.san });
+    setMoveHistory(prev => [...prev, result]);
+    setGameStatus(getGameStatus(chess.current));
+  }, [getGameStatus]);
+
+  // Used for SAN-based moves from AI suggestions — executes the move and updates all state.
   const makeMove = useCallback((move) => {
     let result = null;
     try {
@@ -62,13 +71,10 @@ export function useChessGame() {
       return false;
     }
     if (result === null) return false;
-
     setFen(chess.current.fen());
-    setLastMove({ from: result.from, to: result.to, san: result.san });
-    setMoveHistory(prev => [...prev, result]);
-    setGameStatus(getGameStatus(chess.current));
+    afterMove(result);
     return true;
-  }, [getGameStatus]);
+  }, [afterMove]);
 
   const undoMove = useCallback(() => {
     if (moveHistory.length === 0) return;
@@ -126,9 +132,11 @@ export function useChessGame() {
 
   const getPgn = useCallback(() => {
     return chess.current.pgn();
-  }, [fen]); // fen dep ensures pgn stays in sync
+  }, [fen]);
 
   return {
+    chess,
+    setPosition: setFen,
     fen,
     pgn: getPgn(),
     moveHistory,
@@ -137,6 +145,7 @@ export function useChessGame() {
     currentTurn: chess.current.turn() === 'w' ? 'White' : 'Black',
     isDrillMode,
     drillPosition,
+    afterMove,
     makeMove,
     undoMove,
     resetGame,

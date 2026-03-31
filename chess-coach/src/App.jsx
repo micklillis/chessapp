@@ -10,6 +10,8 @@ import './App.css';
 
 export default function App() {
   const {
+    chess,
+    setPosition,
     fen,
     pgn,
     moveHistory,
@@ -18,6 +20,7 @@ export default function App() {
     currentTurn,
     isDrillMode,
     drillPosition,
+    afterMove,
     makeMove,
     undoMove,
     resetGame,
@@ -46,10 +49,6 @@ export default function App() {
       analyzePosition(fen, pgn, lastMove.san);
     }
   }, [lastMove, fen, pgn, isDrillMode, analyzePosition]);
-
-  const handleMove = useCallback((move) => {
-    return makeMove(move);
-  }, [makeMove]);
 
   const handleUndo = useCallback(() => {
     undoMove();
@@ -94,7 +93,9 @@ export default function App() {
         <div className="left-panel">
           <ChessBoard
             fen={fen}
-            onMove={handleMove}
+            chess={chess}
+            setPosition={setPosition}
+            onMove={afterMove}
             lastMove={lastMove}
             gameStatus={gameStatus}
             currentTurn={currentTurn}

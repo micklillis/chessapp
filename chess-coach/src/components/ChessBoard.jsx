@@ -3,6 +3,8 @@ import { useMemo } from 'react';
 
 export default function ChessBoard({
   fen,
+  chess,
+  setPosition,
   onMove,
   lastMove,
   gameStatus,
@@ -44,16 +46,26 @@ export default function ChessBoard({
     }
   }, [gameStatus, currentTurn]);
 
-  function onDrop(sourceSquare, targetSquare, piece) {
+  function onDrop(sourceSquare, targetSquare) {
     if (gameStatus === 'checkmate' || gameStatus === 'stalemate' || gameStatus === 'draw') {
       return false;
     }
-    const moveObj = {
-      from: sourceSquare,
-      to: targetSquare,
-      promotion: 'q'
-    };
-    return onMove(moveObj);
+    let move = null;
+    try {
+      move = chess.current.move({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion: 'q'
+      });
+    } catch (e) {
+      console.log('[ChessBoard] onDrop error:', e.message);
+      return false;
+    }
+    console.log('[ChessBoard] onDrop move result:', move);
+    if (move === null) return false;
+    setPosition(chess.current.fen());
+    onMove(move);
+    return true;
   }
 
   return (

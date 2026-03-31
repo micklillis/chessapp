@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+const API_URL = '/api/analyze';
 
 export function useClaudeCoach() {
   const [analysis, setAnalysis] = useState(null);
@@ -9,7 +9,7 @@ export function useClaudeCoach() {
   const [gameReview, setGameReview] = useState(null);
   const [isReviewLoading, setIsReviewLoading] = useState(false);
 
-  const isApiKeyMissing = !API_KEY || API_KEY === 'your_key_here';
+  const isApiKeyMissing = false;
 
   const analyzePosition = useCallback(async (fen, pgn, lastMove) => {
     if (isApiKeyMissing) return;
@@ -17,12 +17,10 @@ export function useClaudeCoach() {
     setError(null);
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-          'anthropic-version': '2023-06-01'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
@@ -68,12 +66,10 @@ export function useClaudeCoach() {
     if (isApiKeyMissing) return null;
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-          'anthropic-version': '2023-06-01'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
@@ -110,12 +106,10 @@ Respond ONLY in JSON:
     setIsReviewLoading(true);
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-          'anthropic-version': '2023-06-01'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',

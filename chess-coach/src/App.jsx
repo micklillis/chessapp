@@ -10,7 +10,6 @@ import './App.css';
 
 export default function App() {
   const {
-    game,
     fen,
     pgn,
     moveHistory,

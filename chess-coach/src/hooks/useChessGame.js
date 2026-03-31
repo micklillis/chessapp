@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Chess } from 'chess.js';
 
 const DRILL_POSITIONS = [
@@ -37,7 +37,8 @@ const DRILL_POSITIONS = [
 ];
 
 export function useChessGame() {
-  const [game, setGame] = useState(new Chess());
+  const chess = useRef(new Chess());
+  const [fen, setFen] = useState(chess.current.fen());
   const [moveHistory, setMoveHistory] = useState([]);
   const [lastMove, setLastMove] = useState(null);
   const [gameStatus, setGameStatus] = useState('playing');
@@ -54,40 +55,37 @@ export function useChessGame() {
   }, []);
 
   const makeMove = useCallback((move) => {
-    const gameCopy = new Chess(game.fen());
     let result = null;
-
     try {
-      result = gameCopy.move(move);
+      result = chess.current.move(move);
     } catch {
       return false;
     }
+    if (result === null) return false;
 
-    if (!result) return false;
-
-    setGame(gameCopy);
+    setFen(chess.current.fen());
     setLastMove({ from: result.from, to: result.to, san: result.san });
     setMoveHistory(prev => [...prev, result]);
-    setGameStatus(getGameStatus(gameCopy));
+    setGameStatus(getGameStatus(chess.current));
     return true;
-  }, [game, getGameStatus]);
+  }, [getGameStatus]);
 
   const undoMove = useCallback(() => {
     if (moveHistory.length === 0) return;
-    const gameCopy = new Chess(game.fen());
-    gameCopy.undo();
-    setGame(gameCopy);
+    chess.current.undo();
+    setFen(chess.current.fen());
     setMoveHistory(prev => prev.slice(0, -1));
     setLastMove(moveHistory.length >= 2 ? {
       from: moveHistory[moveHistory.length - 2].from,
       to: moveHistory[moveHistory.length - 2].to,
       san: moveHistory[moveHistory.length - 2].san
     } : null);
-    setGameStatus(getGameStatus(gameCopy));
-  }, [game, moveHistory, getGameStatus]);
+    setGameStatus(getGameStatus(chess.current));
+  }, [moveHistory, getGameStatus]);
 
   const resetGame = useCallback(() => {
-    setGame(new Chess());
+    chess.current = new Chess();
+    setFen(chess.current.fen());
     setMoveHistory([]);
     setLastMove(null);
     setGameStatus('playing');
@@ -97,8 +95,8 @@ export function useChessGame() {
     setIsDrillMode(true);
     const pos = DRILL_POSITIONS[drillIndex % DRILL_POSITIONS.length];
     setDrillPosition(pos);
-    const drillGame = new Chess(pos.fen);
-    setGame(drillGame);
+    chess.current = new Chess(pos.fen);
+    setFen(chess.current.fen());
     setMoveHistory([]);
     setLastMove(null);
     setGameStatus('playing');
@@ -109,8 +107,8 @@ export function useChessGame() {
     setDrillIndex(nextIndex);
     const pos = DRILL_POSITIONS[nextIndex];
     setDrillPosition(pos);
-    const drillGame = new Chess(pos.fen);
-    setGame(drillGame);
+    chess.current = new Chess(pos.fen);
+    setFen(chess.current.fen());
     setMoveHistory([]);
     setLastMove(null);
     setGameStatus('playing');
@@ -119,21 +117,24 @@ export function useChessGame() {
   const exitDrillMode = useCallback(() => {
     setIsDrillMode(false);
     setDrillPosition(null);
-    resetGame();
-  }, [resetGame]);
+    chess.current = new Chess();
+    setFen(chess.current.fen());
+    setMoveHistory([]);
+    setLastMove(null);
+    setGameStatus('playing');
+  }, []);
 
   const getPgn = useCallback(() => {
-    return game.pgn();
-  }, [game]);
+    return chess.current.pgn();
+  }, [fen]); // fen dep ensures pgn stays in sync
 
   return {
-    game,
-    fen: game.fen(),
+    fen,
     pgn: getPgn(),
     moveHistory,
     lastMove,
     gameStatus,
-    currentTurn: game.turn() === 'w' ? 'White' : 'Black',
+    currentTurn: chess.current.turn() === 'w' ? 'White' : 'Black',
     isDrillMode,
     drillPosition,
     makeMove,

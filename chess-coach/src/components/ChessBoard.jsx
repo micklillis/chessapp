@@ -46,7 +46,7 @@ export default function ChessBoard({
     }
   }, [gameStatus, currentTurn]);
 
-  function onDrop(sourceSquare, targetSquare) {
+  function onDrop({ sourceSquare, targetSquare }) {
     if (gameStatus === 'checkmate' || gameStatus === 'stalemate' || gameStatus === 'draw') {
       return false;
     }
@@ -68,6 +68,8 @@ export default function ChessBoard({
     return true;
   }
 
+  const boardWidth = Math.min(560, typeof window !== 'undefined' ? window.innerWidth * 0.55 : 560);
+
   return (
     <div className="chess-board-container">
       {isDrillMode && drillPosition && (
@@ -81,16 +83,18 @@ export default function ChessBoard({
       </div>
       <div className="board-wrapper">
         <Chessboard
-          position={fen}
-          onPieceDrop={onDrop}
-          customSquareStyles={customSquareStyles}
-          boardWidth={Math.min(560, typeof window !== 'undefined' ? window.innerWidth * 0.55 : 560)}
-          customBoardStyle={{
-            borderRadius: '8px',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.5)'
+          options={{
+            position: fen,
+            onPieceDrop: onDrop,
+            squareStyles: customSquareStyles,
+            boardStyle: {
+              borderRadius: '8px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+              width: `${boardWidth}px`
+            },
+            darkSquareStyle: { backgroundColor: '#0f3460' },
+            lightSquareStyle: { backgroundColor: '#e8d5b7' }
           }}
-          customDarkSquareStyle={{ backgroundColor: '#0f3460' }}
-          customLightSquareStyle={{ backgroundColor: '#e8d5b7' }}
         />
       </div>
     </div>

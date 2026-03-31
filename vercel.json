@@ -1,3 +1,5 @@
 {
+  "buildCommand": "cd chess-coach && npm install && npm run build",
+  "outputDirectory": "chess-coach/dist",
   "rewrites": [{ "source": "/api/(.*)", "destination": "/api/$1" }]
 }

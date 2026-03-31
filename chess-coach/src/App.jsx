@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useChessGame } from './hooks/useChessGame';
 import { useClaudeCoach } from './hooks/useClaudeCoach';
 import ChessBoard from './components/ChessBoard';
@@ -29,6 +29,8 @@ export default function App() {
     exitDrillMode
   } = useChessGame();
 
+  const [playerColour, setPlayerColour] = useState('w');
+
   const {
     analysis,
     isLoading,
@@ -46,9 +48,9 @@ export default function App() {
 
   useEffect(() => {
     if (lastMove && !isDrillMode) {
-      analyzePosition(fen, pgn, lastMove.san);
+      analyzePosition(fen, pgn, lastMove.san, playerColour);
     }
-  }, [lastMove, fen, pgn, isDrillMode, analyzePosition]);
+  }, [lastMove, fen, pgn, isDrillMode, playerColour, analyzePosition]);
 
   const handleUndo = useCallback(() => {
     undoMove();
@@ -101,6 +103,8 @@ export default function App() {
             currentTurn={currentTurn}
             isDrillMode={isDrillMode}
             drillPosition={drillPosition}
+            playerColour={playerColour}
+            onPlayerColourChange={setPlayerColour}
           />
 
           <MoveHistory
@@ -129,6 +133,7 @@ export default function App() {
             onSuggestedMove={handleSuggestedMove}
             fen={fen}
             pgn={pgn}
+            playerColour={playerColour}
           />
 
           <DrillMode

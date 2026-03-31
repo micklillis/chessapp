@@ -17,7 +17,8 @@ export default function CoachPanel({
   onRetry,
   onSuggestedMove,
   fen,
-  pgn
+  pgn,
+  playerColour
 }) {
   if (isApiKeyMissing) {
     return (
@@ -43,6 +44,9 @@ export default function CoachPanel({
     <div className="coach-panel">
       <div className="coach-header">
         <h2 className="coach-title">♟ ChessCoach AI</h2>
+        <span className="coach-perspective">
+          Coaching you as {playerColour === 'b' ? 'Black' : 'White'}
+        </span>
         {isLoading && <span className="coach-loading-indicator">Analyzing...</span>}
       </div>
 

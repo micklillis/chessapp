@@ -10,7 +10,9 @@ export default function ChessBoard({
   gameStatus,
   currentTurn,
   isDrillMode,
-  drillPosition
+  drillPosition,
+  playerColour,
+  onPlayerColourChange
 }) {
   const customSquareStyles = useMemo(() => {
     const styles = {};
@@ -72,6 +74,21 @@ export default function ChessBoard({
 
   return (
     <div className="chess-board-container">
+      <div className="player-colour-selector">
+        <button
+          className={`colour-btn${playerColour === 'w' ? ' colour-btn-active' : ''}`}
+          onClick={() => onPlayerColourChange('w')}
+        >
+          I'm playing White
+        </button>
+        <button
+          className={`colour-btn${playerColour === 'b' ? ' colour-btn-active' : ''}`}
+          onClick={() => onPlayerColourChange('b')}
+        >
+          I'm playing Black
+        </button>
+      </div>
+
       {isDrillMode && drillPosition && (
         <div className="drill-banner">
           <span className="drill-label">DRILL MODE</span>

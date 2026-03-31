@@ -147,6 +147,36 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
+.player-colour-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.colour-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.colour-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.colour-btn-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .drill-banner {
   background: linear-gradient(135deg, #e94560, #b91c1c);
   border-radius: 8px;
@@ -308,6 +338,12 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--accent);
+}
+
+.coach-perspective {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .coach-loading-indicator {

@@ -11,10 +11,12 @@ export function useClaudeCoach() {
 
   const isApiKeyMissing = false;
 
-  const analyzePosition = useCallback(async (fen, pgn, lastMove) => {
+  const analyzePosition = useCallback(async (fen, pgn, lastMove, playerColour = 'w') => {
     if (isApiKeyMissing) return;
     setIsLoading(true);
     setError(null);
+
+    const playerName = playerColour === 'w' ? 'White' : 'Black';
 
     try {
       const response = await fetch(API_URL, {
@@ -26,6 +28,7 @@ export function useClaudeCoach() {
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1000,
           system: `You are ChessCoach, an expert chess coach and opening theorist.
+    The player you are coaching is playing as ${playerName}. Focus your analysis, suggestions and key ideas specifically for that player's perspective. When suggesting moves, only suggest moves for the player's colour when it is their turn.
     After each move, analyze the position and respond ONLY in this exact JSON format with no extra text:
     {
       "opening_name": "Name of the opening or variation, or 'Opening phase complete' if past move 15",

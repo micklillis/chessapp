@@ -1,33 +1,95 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 const API_URL = '/api/analyze';
+
+// Extract completed fields from a partial JSON string as it streams in.
+function parsePartialAnalysis(text) {
+  const result = {};
+  const stringFields = [
+    'opening_name', 'opening_description', 'position_assessment',
+    'last_move_quality', 'last_move_explanation', 'key_idea',
+    'suggested_moves_explanation', 'fun_fact'
+  ];
+  for (const field of stringFields) {
+    const match = text.match(
+      new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\[\\s\\S])*)"`));
+    if (match) {
+      result[field] = match[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+  }
+  const arrayMatch = text.match(/"suggested_moves"\s*:\s*\[([^\]]*)\]/);
+  if (arrayMatch) {
+    try { result.suggested_moves = JSON.parse('[' + arrayMatch[1] + ']'); } catch {}
+  }
+  return result;
+}
+
+// Read an SSE stream to completion and return the accumulated text content.
+async function readSSEText(reader) {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') continue;
+      try {
+        const event = JSON.parse(raw);
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          text += event.delta.text;
+        }
+      } catch {}
+    }
+  }
+  return text;
+}
 
 export function useClaudeCoach(chess) {
   const [analysis, setAnalysis] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [gameReview, setGameReview] = useState(null);
   const [isReviewLoading, setIsReviewLoading] = useState(false);
 
   const isApiKeyMissing = false;
+  const debounceRef = useRef(null);
+  const abortRef = useRef(null);
 
-  const analyzePosition = useCallback(async (fen, pgn, lastMove, playerColour = 'w') => {
+  const analyzePosition = useCallback((fen, pgn, lastMove, playerColour = 'w') => {
     if (isApiKeyMissing) return;
-    setIsLoading(true);
-    setError(null);
 
-    const playerName = playerColour === 'w' ? 'White' : 'Black';
+    // Cancel pending debounce and abort any in-flight request
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
 
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `You are ChessCoach, an expert chess coach and opening theorist.
+    debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setIsLoading(true);
+      setIsStreaming(true);
+      setError(null);
+      setAnalysis({});
+
+      const playerName = playerColour === 'w' ? 'White' : 'Black';
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            system: `You are ChessCoach, an expert chess coach and opening theorist.
     The player you are coaching is playing as ${playerName}. Focus your analysis, suggestions and key ideas specifically for that player's perspective. When suggesting moves, only suggest moves for the player's colour when it is their turn.
     After each move, analyze the position and respond ONLY in this exact JSON format with no extra text:
     {
@@ -41,85 +103,106 @@ export function useClaudeCoach(chess) {
       "suggested_moves_explanation": "Brief explanation of why these moves are worth considering",
       "fun_fact": "An interesting fact about this opening or position (optional, leave empty string if none)"
     }`,
-          messages: [{
-            role: 'user',
-            content: `Current FEN: ${fen}\nGame PGN: ${pgn}\nLast move played: ${lastMove}\nAnalyze this position.`
-          }]
-        })
-      });
+            messages: [{
+              role: 'user',
+              content: `Current FEN: ${fen}\nGame PGN: ${pgn}\nLast move played: ${lastMove}\nAnalyze this position.`
+            }]
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
 
-      const data = await response.json();
-      const text = data.content[0].text;
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Invalid response format from Claude');
-      const parsed = JSON.parse(jsonMatch[0]);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulated = '';
+        const extractedKeys = new Set();
 
-      // Validate suggested moves against current legal moves
-      const legalMoves = chess?.current?.moves() ?? [];
-      const validMoves = (parsed.suggested_moves ?? []).filter(m => legalMoves.includes(m));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      if (validMoves.length > 0 || legalMoves.length === 0) {
-        // At least one valid suggestion (or game is over) — use as-is
-        setAnalysis({ ...parsed, suggested_moves: validMoves });
-      } else {
-        // All suggestions were illegal — show partial analysis while retrying
-        setAnalysis({ ...parsed, suggested_moves: [], suggested_moves_explanation: 'Analysing position...' });
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
 
-        try {
-          const retryResponse = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 200,
-              system: 'You are a chess coach. Respond ONLY with a JSON object in this exact format: {"suggested_moves": ["move1", "move2", "move3"], "suggested_moves_explanation": "brief explanation"}',
-              messages: [{
-                role: 'user',
-                content: `Legal moves available: ${legalMoves.join(', ')}\nFrom this list only, suggest the 3 best moves for the player.`
-              }]
-            })
-          });
-          if (retryResponse.ok) {
-            const retryData = await retryResponse.json();
-            const retryText = retryData.content[0].text;
-            const retryMatch = retryText.match(/\{[\s\S]*\}/);
-            if (retryMatch) {
-              const retryParsed = JSON.parse(retryMatch[0]);
-              const retryValid = (retryParsed.suggested_moves ?? []).filter(m => legalMoves.includes(m));
-              setAnalysis(prev => ({
-                ...prev,
-                suggested_moves: retryValid,
-                suggested_moves_explanation: retryParsed.suggested_moves_explanation ?? ''
-              }));
-            }
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') continue;
+            try {
+              const event = JSON.parse(raw);
+              if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                accumulated += event.delta.text;
+                const partial = parsePartialAnalysis(accumulated);
+                const newKeys = Object.keys(partial).filter(k => !extractedKeys.has(k));
+                if (newKeys.length > 0) {
+                  newKeys.forEach(k => extractedKeys.add(k));
+                  setAnalysis(prev => ({ ...prev, ...partial }));
+                }
+              }
+            } catch {}
           }
-        } catch {
-          // Retry failed — leave the "Analysing position..." message in place
         }
+
+        // Validate suggested moves against legal moves
+        const legalMoves = chess?.current?.moves() ?? [];
+        const finalPartial = parsePartialAnalysis(accumulated);
+        const validMoves = (finalPartial.suggested_moves ?? []).filter(m => legalMoves.includes(m));
+
+        if (validMoves.length > 0 || legalMoves.length === 0) {
+          setAnalysis(prev => ({ ...prev, suggested_moves: validMoves }));
+        } else {
+          // All suggestions illegal — retry with legal moves list
+          setAnalysis(prev => ({ ...prev, suggested_moves: [], suggested_moves_explanation: 'Analysing position...' }));
+          try {
+            const retryResp = await fetch(API_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+              body: JSON.stringify({
+                system: 'You are a chess coach. Respond ONLY with a JSON object in this exact format: {"suggested_moves": ["move1", "move2", "move3"], "suggested_moves_explanation": "brief explanation"}',
+                messages: [{
+                  role: 'user',
+                  content: `Legal moves available: ${legalMoves.join(', ')}\nFrom this list only, suggest the 3 best moves for the player.`
+                }]
+              })
+            });
+            if (retryResp.ok) {
+              const retryText = await readSSEText(retryResp.body.getReader());
+              const retryMatch = retryText.match(/\{[\s\S]*\}/);
+              if (retryMatch) {
+                const retryParsed = JSON.parse(retryMatch[0]);
+                const retryValid = (retryParsed.suggested_moves ?? []).filter(m => legalMoves.includes(m));
+                setAnalysis(prev => ({
+                  ...prev,
+                  suggested_moves: retryValid,
+                  suggested_moves_explanation: retryParsed.suggested_moves_explanation ?? ''
+                }));
+              }
+            }
+          } catch {}
+        }
+
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to get analysis');
+          setAnalysis(null);
+        }
+      } finally {
+        setIsLoading(false);
+        setIsStreaming(false);
       }
-    } catch (err) {
-      setError(err.message || 'Failed to get analysis');
-    } finally {
-      setIsLoading(false);
-    }
+    }, 300);
   }, [chess, isApiKeyMissing]);
 
   const evaluateDrillMove = useCallback(async (fen, move) => {
     if (isApiKeyMissing) return null;
-
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
           system: `You are a chess coach running a drilling exercise.
 Respond ONLY in JSON:
 {
@@ -134,14 +217,11 @@ Respond ONLY in JSON:
           }]
         })
       });
-
       if (!response.ok) throw new Error(`API error: ${response.status}`);
-
-      const data = await response.json();
-      const text = data.content[0].text;
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Invalid response format');
-      return JSON.parse(jsonMatch[0]);
+      const text = await readSSEText(response.body.getReader());
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Invalid response format');
+      return JSON.parse(match[0]);
     } catch {
       return null;
     }
@@ -150,16 +230,11 @@ Respond ONLY in JSON:
   const reviewGame = useCallback(async (pgn) => {
     if (isApiKeyMissing) return;
     setIsReviewLoading(true);
-
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
           system: `You are a chess coach reviewing a completed game.
 Respond ONLY in JSON:
 {
@@ -176,14 +251,11 @@ Respond ONLY in JSON:
           }]
         })
       });
-
       if (!response.ok) throw new Error(`API error: ${response.status}`);
-
-      const data = await response.json();
-      const text = data.content[0].text;
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Invalid response format');
-      setGameReview(JSON.parse(jsonMatch[0]));
+      const text = await readSSEText(response.body.getReader());
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Invalid response format');
+      setGameReview(JSON.parse(match[0]));
     } catch (err) {
       setError(err.message || 'Failed to get game review');
     } finally {
@@ -200,13 +272,14 @@ Respond ONLY in JSON:
     setGameReview(null);
   }, []);
 
-  const retryAnalysis = useCallback((fen, pgn, lastMove) => {
-    analyzePosition(fen, pgn, lastMove);
+  const retryAnalysis = useCallback((fen, pgn, lastMove, playerColour) => {
+    analyzePosition(fen, pgn, lastMove, playerColour);
   }, [analyzePosition]);
 
   return {
     analysis,
     isLoading,
+    isStreaming,
     error,
     gameReview,
     isReviewLoading,

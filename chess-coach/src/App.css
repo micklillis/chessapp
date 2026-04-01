@@ -340,6 +340,19 @@ body {
   color: var(--accent);
 }
 
+.streaming-bar {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--border);
+  width: 75%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.section-streaming {
+  border-left: 2px solid var(--accent);
+  opacity: 0.85;
+}
+
 .coach-perspective {
   font-size: 0.75rem;
   color: var(--text-muted);

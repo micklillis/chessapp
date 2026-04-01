@@ -34,6 +34,7 @@ export default function App() {
   const {
     analysis,
     isLoading,
+    isStreaming,
     error,
     gameReview,
     isReviewLoading,
@@ -126,6 +127,7 @@ export default function App() {
           <CoachPanel
             analysis={analysis}
             isLoading={isLoading}
+            isStreaming={isStreaming}
             error={error}
             isApiKeyMissing={isApiKeyMissing}
             lastMove={lastMove}

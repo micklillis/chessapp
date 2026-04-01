@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 const API_URL = '/api/analyze';
 
-export function useClaudeCoach() {
+export function useClaudeCoach(chess) {
   const [analysis, setAnalysis] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -57,13 +57,56 @@ export function useClaudeCoach() {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('Invalid response format from Claude');
       const parsed = JSON.parse(jsonMatch[0]);
-      setAnalysis(parsed);
+
+      // Validate suggested moves against current legal moves
+      const legalMoves = chess?.current?.moves() ?? [];
+      const validMoves = (parsed.suggested_moves ?? []).filter(m => legalMoves.includes(m));
+
+      if (validMoves.length > 0 || legalMoves.length === 0) {
+        // At least one valid suggestion (or game is over) — use as-is
+        setAnalysis({ ...parsed, suggested_moves: validMoves });
+      } else {
+        // All suggestions were illegal — show partial analysis while retrying
+        setAnalysis({ ...parsed, suggested_moves: [], suggested_moves_explanation: 'Analysing position...' });
+
+        try {
+          const retryResponse = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 200,
+              system: 'You are a chess coach. Respond ONLY with a JSON object in this exact format: {"suggested_moves": ["move1", "move2", "move3"], "suggested_moves_explanation": "brief explanation"}',
+              messages: [{
+                role: 'user',
+                content: `Legal moves available: ${legalMoves.join(', ')}\nFrom this list only, suggest the 3 best moves for the player.`
+              }]
+            })
+          });
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            const retryText = retryData.content[0].text;
+            const retryMatch = retryText.match(/\{[\s\S]*\}/);
+            if (retryMatch) {
+              const retryParsed = JSON.parse(retryMatch[0]);
+              const retryValid = (retryParsed.suggested_moves ?? []).filter(m => legalMoves.includes(m));
+              setAnalysis(prev => ({
+                ...prev,
+                suggested_moves: retryValid,
+                suggested_moves_explanation: retryParsed.suggested_moves_explanation ?? ''
+              }));
+            }
+          }
+        } catch {
+          // Retry failed — leave the "Analysing position..." message in place
+        }
+      }
     } catch (err) {
       setError(err.message || 'Failed to get analysis');
     } finally {
       setIsLoading(false);
     }
-  }, [isApiKeyMissing]);
+  }, [chess, isApiKeyMissing]);
 
   const evaluateDrillMove = useCallback(async (fen, move) => {
     if (isApiKeyMissing) return null;

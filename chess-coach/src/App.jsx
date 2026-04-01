@@ -44,7 +44,7 @@ export default function App() {
     clearAnalysis,
     clearGameReview,
     retryAnalysis
-  } = useClaudeCoach();
+  } = useClaudeCoach(chess);
 
   useEffect(() => {
     if (lastMove && !isDrillMode) {

@@ -120,25 +120,29 @@ export default function CoachPanel({
             <p className="key-idea">{analysis.key_idea}</p>
           </div>
 
-          {analysis.suggested_moves?.length > 0 && (
+          {(analysis.suggested_moves?.length > 0 || analysis.suggested_moves_explanation) && (
             <div className="analysis-section suggestions-section">
               <div className="section-header">
                 <span className="section-icon">➡️</span>
                 <span className="section-title">Try These Moves</span>
               </div>
-              <div className="move-chips">
-                {analysis.suggested_moves.map((move, i) => (
-                  <button
-                    key={i}
-                    className="move-chip"
-                    onClick={() => onSuggestedMove && onSuggestedMove(move)}
-                    title="Click to attempt this move"
-                  >
-                    {move}
-                  </button>
-                ))}
-              </div>
-              {analysis.suggested_moves_explanation && (
+              {analysis.suggested_moves?.length > 0 ? (
+                <div className="move-chips">
+                  {analysis.suggested_moves.map((move, i) => (
+                    <button
+                      key={i}
+                      className="move-chip"
+                      onClick={() => onSuggestedMove && onSuggestedMove(move)}
+                      title="Click to attempt this move"
+                    >
+                      {move}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="suggestions-explanation">{analysis.suggested_moves_explanation}</p>
+              )}
+              {analysis.suggested_moves?.length > 0 && analysis.suggested_moves_explanation && (
                 <p className="suggestions-explanation">{analysis.suggested_moves_explanation}</p>
               )}
             </div>
